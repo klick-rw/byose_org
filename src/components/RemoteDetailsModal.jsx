@@ -1,7 +1,8 @@
 // src/components/RemoteDetailsModal.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { getImageData, getOwnerLabel, lastNChars, sendData } from "../utils/helper.js";
-import { presence_server } from "../config/server_api.js";
+import { presence_server, presence_control_server } from "../config/server_api.js";
+import { deviceLogsUrl } from "../utils/deviceControlUrl.js";
 import { useNotification } from "../context/NotificationContext.jsx";
 import { X, Download, Cpu, Power, Hash, User as UserIcon, Terminal } from "lucide-react";
 
@@ -68,7 +69,8 @@ export default function RemoteDetailsModal({
     const handleToggleLogs = async () => {
         const action = logsUnlocked ? "lock" : "unlock";
         setLogsLoading(true);
-        const url = `${presence_server}/api/admin/remotes/${remote.serialNumber}/logs`;
+        // Publishes to the device over MQTT, so it goes to the host that holds the broker connection.
+        const url = deviceLogsUrl(presence_control_server, remote.serialNumber);
         const res = await sendData(url, { action });
         if (res?.error || res?.data === -1) {
             showNotification(res?.error || "Failed to toggle logs", "error");
