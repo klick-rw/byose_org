@@ -12,6 +12,8 @@ import {
 import { fetchData, patchData, sendData, updateData, returnToken } from "../../utils/helper.js";
 import { presence_server } from "../../config/server_api.js";
 import { useNotification } from "../../context/NotificationContext.jsx";
+import { jwtDecode } from "jwt-decode";
+import ProvisioningAccess from "../../components/ProvisioningAccess.jsx";
 
 // Camera fleet: which version every camera runs, whether it is being updated, what failed, and the release controls.
 // All data comes from the backend's admin routes (/api/admin/ota for the fleet and releases, /api/admin/provisioning for
@@ -67,8 +69,15 @@ const resultTone = (r) => (r === "committed" ? "green" : r ? "red" : "gray");
 const releaseTone = (s) => ({ active: "green", draft: "gray", paused: "amber", revoked: "red" }[s] || "gray");
 const unitTone = (s) => ({ ready: "green", provisioning: "amber", recovering: "amber", retired: "red" }[s] || "gray");
 
+// The role in the signed-in session decides what to show; the backend decides what is allowed.
+const sessionRole = () => {
+  try { return jwtDecode(returnToken()).role || null; } catch { return null; }
+};
+
 const CameraFleet = () => {
   const { showNotification } = useNotification();
+  const role = sessionRole();
+  const isFactory = role === "factory";
   const [tab, setTab] = useState("cameras");
   const [reporting, setReporting] = useState([]);
   const [cameras, setCameras] = useState([]);
@@ -103,10 +112,11 @@ const CameraFleet = () => {
   }, [filterState, failingOnly]);
 
   useEffect(() => {
+    if (isFactory) return undefined;           // a factory operator may only create provisioning tokens: nothing else to load
     load();
     const t = setInterval(load, 60000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [load, isFactory]);
 
   // every camera in the database, whether or not its updater has reported yet (those show as "not reporting")
   const devices = useMemo(() => {
@@ -178,6 +188,18 @@ const CameraFleet = () => {
     }
   };
 
+  if (isFactory) {
+    return (
+      <div className="space-y-6 animate-slide-entrance pb-10">
+        <div className="px-2">
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#333333]">Factory access</h1>
+          <p className="text-xs sm:text-sm text-gray-500 font-medium">Create the short-lived token the factory tool needs.</p>
+        </div>
+        <ProvisioningAccess isAdmin={false} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 sm:space-y-8 animate-slide-entrance pb-10">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-2">
@@ -216,7 +238,7 @@ const CameraFleet = () => {
       </div>
 
       <div className="flex bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm w-fit mx-2">
-        {[["cameras", "Cameras"], ["releases", "Releases"], ["units", "Provisioned"]].map(([key, label]) => (
+        {[["cameras", "Cameras"], ["releases", "Releases"], ["units", "Provisioned"], ["access", "Provisioning access"]].map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -330,6 +352,8 @@ const CameraFleet = () => {
           <p className="px-4 py-3 text-[10px] text-gray-400">Provisioning and recovery run from the factory tool; this list is read-only.</p>
         </div>
       )}
+
+      {tab === "access" && <ProvisioningAccess isAdmin={role === "admin"} />}
 
       {detail && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setDetail(null)}>
