@@ -9,6 +9,7 @@ import RemoteUsageHistory from "./pages/dashboard/RemoteUsageHistory.jsx";
 import DeviceInsights from "./pages/dashboard/DeviceInsights.jsx";
 import RevenueInsights from "./pages/dashboard/RevenueInsights.jsx";
 import AuditLogs from "./pages/dashboard/AuditLogs.jsx";
+import CameraFleet from "./pages/dashboard/CameraFleet.jsx";
 
 // auth imports
 import SignIn from "./pages/auth/Sign-in.jsx";
@@ -97,6 +98,11 @@ export const routes = [
             name: "Audit Logs",
             path: "presence-eye-buttons/audit-logs",
             element: <AuditLogs />,
+          },
+          {
+            name: "Camera Fleet",
+            path: "presence-eye-buttons/camera-fleet",
+            element: <CameraFleet />,
           },
           {
             name: "Remote History",
