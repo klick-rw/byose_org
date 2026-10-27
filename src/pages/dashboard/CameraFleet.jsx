@@ -70,7 +70,8 @@ const unitTone = (s) => ({ ready: "green", provisioning: "amber", recovering: "a
 const CameraFleet = () => {
   const { showNotification } = useNotification();
   const [tab, setTab] = useState("cameras");
-  const [devices, setDevices] = useState([]);
+  const [reporting, setReporting] = useState([]);
+  const [cameras, setCameras] = useState([]);
   const [releases, setReleases] = useState([]);
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -87,13 +88,15 @@ const CameraFleet = () => {
     const params = new URLSearchParams();
     if (filterState) params.set("state", filterState);
     if (failingOnly) params.set("failing", "true");
-    const [fleet, rel, prov] = await Promise.all([
+    const [fleet, rel, prov, cams] = await Promise.all([
       fetchData(`${OTA}/fleet?${params.toString()}`, token),
       fetchData(`${OTA}/releases`, token),
       fetchData(`${PROV}/units`, token),
+      fetchData(`${presence_server}/api/admin/remotes?modelType=camera`, token),
     ]);
     if (fleet.error) setError(fleet.error);
-    else setDevices(fleet.data.devices || []);
+    else setReporting(fleet.data.devices || []);
+    if (!cams.error) setCameras(cams.data.remotes || []);
     if (!rel.error) setReleases(rel.data.releases || []);
     if (!prov.error) setUnits(prov.data.units || []);
     setLoading(false);
@@ -105,10 +108,21 @@ const CameraFleet = () => {
     return () => clearInterval(t);
   }, [load]);
 
+  // every camera in the database, whether or not its updater has reported yet (those show as "not reporting")
+  const devices = useMemo(() => {
+    const known = new Set(reporting.map((d) => d.serial));
+    const filtering = Boolean(filterState || failingOnly);
+    const silent = filtering ? [] : cameras
+      .filter((c) => c.modelType === "camera" && !known.has(c.serialNumber))
+      .map((c) => ({ serial: c.serialNumber, notReporting: true, owner: c.owner?.email || null, seenRecently: false }));
+    return [...reporting, ...silent];
+  }, [reporting, cameras, filterState, failingOnly]);
+
   const newest = useMemo(() => releases.filter((r) => r.status === "active").sort((a, b) => b.sequence - a.sequence)[0], [releases]);
   const stats = useMemo(() => ({
     total: devices.length,
     seen: devices.filter((d) => d.seenRecently).length,
+    silent: devices.filter((d) => d.notReporting).length,
     updating: devices.filter((d) => d.updateState && d.updateState !== "idle").length,
     attention: devices.filter(needsAttention).length,
     current: newest ? devices.filter((d) => d.version === newest.version).length : null,
@@ -190,7 +204,7 @@ const CameraFleet = () => {
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 px-2">
-        <StatCard title="Cameras" value={stats.total} subtitle="Reporting to the updater" icon={<MdOutlineVideocam size={22} />} />
+        <StatCard title="Cameras" value={stats.total} subtitle={`${stats.total - stats.silent} reporting, ${stats.silent} not yet`} icon={<MdOutlineVideocam size={22} />} />
         <StatCard title="Seen recently" value={stats.seen} subtitle="Checked in within 40 minutes" icon={<MdOutlineSensors size={22} />} />
         <StatCard
           title="Updating"
@@ -247,12 +261,12 @@ const CameraFleet = () => {
                   <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">{loading ? "Loading…" : "No cameras match."}</td></tr>
                 )}
                 {devices.map((d) => (
-                  <tr key={d.serial} onClick={() => openDetail(d.serial)} className="border-t border-gray-50 hover:bg-gray-50 cursor-pointer">
+                  <tr key={d.serial} onClick={() => !d.notReporting && openDetail(d.serial)} className={`border-t border-gray-50 ${d.notReporting ? "" : "hover:bg-gray-50 cursor-pointer"}`}>
                     <td className="px-4 py-3 font-bold text-[#333333]">{d.serial}{d.cohort && <span className="ml-2 text-gray-400">({d.cohort})</span>}</td>
-                    <td className="px-4 py-3">{d.version || "unknown"}{d.build && <span className="text-gray-400"> · {d.build}</span>}</td>
+                    <td className="px-4 py-3">{d.notReporting ? <span className="text-gray-400">not reporting{d.owner ? ` · ${d.owner}` : ""}</span> : d.version || "unknown"}{d.build && <span className="text-gray-400"> · {d.build}</span>}</td>
                     <td className="px-4 py-3"><span className={d.seenRecently ? "text-emerald-700" : "text-gray-500"}>{relative(d.lastSeenAt)}</span></td>
-                    <td className="px-4 py-3"><Chip tone={updateTone(d.updateState)}>{d.updateState || "idle"}</Chip>{d.updateTarget && <span className="ml-2 text-gray-500">to {d.updateTarget}</span>}</td>
-                    <td className="px-4 py-3">{d.lastResult ? <><Chip tone={resultTone(d.lastResult)}>{d.lastResult}</Chip><span className="ml-2 text-gray-400">{relative(d.lastResultAt)}</span></> : <span className="text-gray-400">none</span>}</td>
+                    <td className="px-4 py-3">{d.notReporting ? <Chip>no updater key</Chip> : <Chip tone={updateTone(d.updateState)}>{d.updateState || "idle"}</Chip>}{d.updateTarget && <span className="ml-2 text-gray-500">to {d.updateTarget}</span>}</td>
+                    <td className="px-4 py-3">{d.notReporting ? <span className="text-gray-400">—</span> : d.lastResult ? <><Chip tone={resultTone(d.lastResult)}>{d.lastResult}</Chip><span className="ml-2 text-gray-400">{relative(d.lastResultAt)}</span></> : <span className="text-gray-400">none</span>}</td>
                     <td className="px-4 py-3">{d.failedVersions?.length ? d.failedVersions.join(", ") : "—"}{d.hint && <Chip tone="amber">{d.hint.kind}</Chip>}</td>
                   </tr>
                 ))}
