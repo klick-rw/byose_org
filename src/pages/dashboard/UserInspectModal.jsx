@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import {deleteData, fetchData, patchData, returnToken, sendData} from '../../utils/helper.js';
 import {presence_server} from '../../config/server_api.js';
+import RoleChangePanel from './RoleChangePanel.jsx';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -798,6 +799,7 @@ export default function UserInspectModal({userId, onClose, timeRange}) {
                                             <KV label="Trusted devices" value={acc?.trustedDeviceCount}/>
                                             <KV label="Member since" value={fmtDate(acc?.memberSince)}/>
                                         </div>
+                                        <RoleChangePanel userId={userId} currentRole={acc?.role} onChanged={load}/>
                                     </Section>
 
                                     {/* Device summary */}
